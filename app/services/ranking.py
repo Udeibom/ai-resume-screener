@@ -3,31 +3,69 @@ import os
 from typing import Any, Dict, List
 
 import mlflow
+from google.genai import types
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
 from app.services.ai_service import AIService
 
-# Set the target MLflow tracking URI (points to our new Docker container service)
-mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
-mlflow.set_experiment("Resume_Screening_Rankings")
-
 
 class CandidateRankingEngine:
+    """
+    Production ranking engine.
+
+    Features:
+    - Lazy MLflow initialization
+    - Gemini-powered evaluation
+    - No side effects during import
+    """
+
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
         self.ai = AIService()
+        self._mlflow_initialized = False
+
+    def _initialize_mlflow(self) -> None:
+        """
+        Initialize MLflow only when the ranking engine is actually used.
+        """
+
+        if self._mlflow_initialized:
+            return
+
+        tracking_uri = os.getenv(
+            "MLFLOW_TRACKING_URI",
+            "http://localhost:5000",
+        )
+
+        try:
+            mlflow.set_tracking_uri(tracking_uri)
+            mlflow.set_experiment("Resume_Screening_Rankings")
+            self._mlflow_initialized = True
+
+            logger.info(
+                "MLflow initialized.",
+                extra_context={"tracking_uri": tracking_uri},
+            )
+
+        except Exception as exc:
+            logger.warning(
+                f"MLflow unavailable. Continuing without experiment tracking. {exc}"
+            )
 
     async def rank_candidates(
         self,
         job_description: str,
         limit_candidates: int = 5,
     ) -> List[Dict[str, Any]]:
+
         logger.info(
-            "Initiating candidate matching sequence",
+            "Initiating candidate ranking.",
             extra_context={"limit": limit_candidates},
         )
+
+        self._initialize_mlflow()
 
         job_vector = (await self.ai.generate_embeddings([job_description]))[0]
 
@@ -55,91 +93,107 @@ class CandidateRankingEngine:
         rows = result.fetchall()
 
         if not rows:
-            logger.info("No vectors returned from semantic lookup.")
+            logger.info("No matching candidates found.")
             return []
 
         candidates_context: Dict[int, Dict[str, Any]] = {}
 
         for row in rows:
-            res_id = row.resume_id
+            resume_id = row.resume_id
 
-            if res_id not in candidates_context:
-                candidates_context[res_id] = {
+            if resume_id not in candidates_context:
+                candidates_context[resume_id] = {
                     "filename": row.filename,
                     "profile": row.parsed_profile,
                     "matched_snippets": [],
                 }
 
-            if row.chunk_text not in candidates_context[res_id]["matched_snippets"]:
-                candidates_context[res_id]["matched_snippets"].append(row.chunk_text)
-
-        system_prompt = (
-            "You are an executive technical recruiter. "
-            "Analyze the candidate's resume context "
-            "against the job description. "
-            "Provide a JSON response containing exactly two fields:\n"
-            "1. 'fit_score': An integer rating from 0 to 100.\n"
-            "2. 'justification': A concise sentence explaining "
-            "the score based purely on verified skills."
-        )
-
-        ranked_results: List[Dict[str, Any]] = []
-
-        # Start an MLflow tracking run to evaluate this operational batch execution
-        with mlflow.start_run(run_name="batch_llm_grading"):
-            # Log hyperparameters/configurations
-            mlflow.log_param("llm_model", self.ai.llm_model)
-            mlflow.log_param("embedding_model", self.ai.embedding_model)
-            mlflow.log_text(
-                system_prompt,
-                "prompts/system_prompt.txt",
-            )
-            mlflow.log_text(
-                job_description,
-                "inputs/job_description.txt",
-            )
-
-            for res_id, data in list(candidates_context.items())[:limit_candidates]:
-                user_content = (
-                    f"JOB DESCRIPTION:\n{job_description}\n\n"
-                    f"CANDIDATE PROFILE:\n"
-                    f"{json.dumps(data['profile'])}\n\n"
-                    "RELEVANT RESUME SNIPPETS:\n"
-                    + "\n---\n".join(data["matched_snippets"])
+            if row.chunk_text not in candidates_context[resume_id]["matched_snippets"]:
+                candidates_context[resume_id]["matched_snippets"].append(
+                    row.chunk_text
                 )
 
+        system_prompt = """
+You are an expert technical recruiter.
+
+Compare the candidate against the job description.
+
+Return ONLY JSON.
+
+Schema:
+
+{
+  "fit_score": integer,
+  "justification": string
+}
+
+The score must be between 0 and 100.
+
+Do not invent qualifications.
+"""
+
+        ranked_results = []
+
+        mlflow_context = (
+            mlflow.start_run(run_name="batch_llm_grading")
+            if self._mlflow_initialized
+            else None
+        )
+
+        if mlflow_context:
+            mlflow_context.__enter__()
+
+            mlflow.log_param("llm_model", self.ai.llm_model)
+            mlflow.log_param("embedding_model", self.ai.embedding_model)
+            mlflow.log_text(system_prompt, "prompts/system_prompt.txt")
+            mlflow.log_text(job_description, "inputs/job_description.txt")
+
+        try:
+
+            for resume_id, data in list(candidates_context.items())[
+                :limit_candidates
+            ]:
+
+                prompt = f"""
+JOB DESCRIPTION
+
+{job_description}
+
+CANDIDATE PROFILE
+
+{json.dumps(data['profile'], indent=2)}
+
+MATCHED RESUME SNIPPETS
+
+{chr(10).join(data["matched_snippets"])}
+"""
+
                 try:
-                    response = await self.ai.client.chat.completions.create(
-                        model=self.ai.llm_model,
-                        response_format={"type": "json_object"},
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": system_prompt,
-                            },
-                            {
-                                "role": "user",
-                                "content": user_content,
-                            },
-                        ],
+
+                    response = await self.ai._run_with_retry(
+                        lambda: self.ai.client.models.generate_content(
+                            model=self.ai.llm_model,
+                            contents=f"{system_prompt}\n\n{prompt}",
+                            config=types.GenerateContentConfig(
+                                temperature=0,
+                                response_mime_type="application/json",
+                            ),
+                        )
                     )
 
-                    evaluation = json.loads(response.choices[0].message.content)
+                    evaluation = json.loads(response.text)
 
-                    fit_score = evaluation.get(
-                        "fit_score",
-                        0,
-                    )
+                    fit_score = int(evaluation.get("fit_score", 0))
 
-                    # Log metrics per profile directly inside the MLflow execution loop
-                    mlflow.log_metric(
-                        f"candidate_{res_id}_fit_score",
-                        fit_score,
-                    )
+                    if self._mlflow_initialized:
+                        mlflow.log_metric(
+                            f"candidate_{resume_id}_fit_score",
+                            fit_score,
+                        )
 
                     ranked_results.append(
                         {
-                            "candidate_id": res_id,
+                            "candidate_id": resume_id,
                             "filename": data["filename"],
                             "name": data["profile"].get(
                                 "full_name",
@@ -154,19 +208,23 @@ class CandidateRankingEngine:
                     )
 
                     logger.info(
-                        "Successfully evaluated candidate score",
+                        "Candidate evaluated.",
                         extra_context={
-                            "candidate_id": res_id,
+                            "candidate": resume_id,
                             "score": fit_score,
                         },
                     )
 
-                except Exception as e:
-                    logger.error(
-                        f"Failed to grade candidate context structural loop: {str(e)}",
-                        exc_info=True,
+                except Exception as exc:
+
+                    logger.exception(
+                        f"Failed evaluating candidate {resume_id}: {exc}"
                     )
-                    continue
+
+        finally:
+
+            if mlflow_context:
+                mlflow_context.__exit__(None, None, None)
 
         return sorted(
             ranked_results,
