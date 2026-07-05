@@ -35,6 +35,7 @@ AsyncSessionLocal = async_sessionmaker(
 # Base class for all models
 Base = declarative_base()
 
+
 # Dependency to inject DB sessions into future API routes
 async def get_db():
     async with AsyncSessionLocal() as session:

@@ -10,9 +10,7 @@ from app.core.logger import logger
 from app.services.ai_service import AIService
 
 # Set the target MLflow tracking URI (points to our new Docker container service)
-mlflow.set_tracking_uri(
-    os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-)
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
 mlflow.set_experiment("Resume_Screening_Rankings")
 
 
@@ -31,11 +29,7 @@ class CandidateRankingEngine:
             extra_context={"limit": limit_candidates},
         )
 
-        job_vector = (
-            await self.ai.generate_embeddings(
-                [job_description]
-            )
-        )[0]
+        job_vector = (await self.ai.generate_embeddings([job_description]))[0]
 
         query = text(
             """
@@ -76,13 +70,8 @@ class CandidateRankingEngine:
                     "matched_snippets": [],
                 }
 
-            if (
-                row.chunk_text
-                not in candidates_context[res_id]["matched_snippets"]
-            ):
-                candidates_context[res_id]["matched_snippets"].append(
-                    row.chunk_text
-                )
+            if row.chunk_text not in candidates_context[res_id]["matched_snippets"]:
+                candidates_context[res_id]["matched_snippets"].append(row.chunk_text)
 
         system_prompt = (
             "You are an executive technical recruiter. "
@@ -110,9 +99,7 @@ class CandidateRankingEngine:
                 "inputs/job_description.txt",
             )
 
-            for res_id, data in list(candidates_context.items())[
-                :limit_candidates
-            ]:
+            for res_id, data in list(candidates_context.items())[:limit_candidates]:
                 user_content = (
                     f"JOB DESCRIPTION:\n{job_description}\n\n"
                     f"CANDIDATE PROFILE:\n"
@@ -122,28 +109,22 @@ class CandidateRankingEngine:
                 )
 
                 try:
-                    response = (
-                        await self.ai.client.chat.completions.create(
-                            model=self.ai.llm_model,
-                            response_format={
-                                "type": "json_object"
+                    response = await self.ai.client.chat.completions.create(
+                        model=self.ai.llm_model,
+                        response_format={"type": "json_object"},
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": system_prompt,
                             },
-                            messages=[
-                                {
-                                    "role": "system",
-                                    "content": system_prompt,
-                                },
-                                {
-                                    "role": "user",
-                                    "content": user_content,
-                                },
-                            ],
-                        )
+                            {
+                                "role": "user",
+                                "content": user_content,
+                            },
+                        ],
                     )
 
-                    evaluation = json.loads(
-                        response.choices[0].message.content
-                    )
+                    evaluation = json.loads(response.choices[0].message.content)
 
                     fit_score = evaluation.get(
                         "fit_score",

@@ -15,11 +15,7 @@ T = TypeVar("T")
 
 
 class CandidateEvaluation(BaseModel):
-    fit_score: int = Field(
-        ge=0,
-        le=100,
-        description="Overall candidate fit score."
-    )
+    fit_score: int = Field(ge=0, le=100, description="Overall candidate fit score.")
 
     justification: str
 
@@ -44,9 +40,7 @@ class AIService:
         api_key = os.getenv("GEMINI_API_KEY")
 
         if not api_key:
-            raise RuntimeError(
-                "GEMINI_API_KEY was not found in your .env file."
-            )
+            raise RuntimeError("GEMINI_API_KEY was not found in your .env file.")
 
         self.client = genai.Client(api_key=api_key)
 
