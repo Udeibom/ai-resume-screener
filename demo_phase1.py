@@ -1,13 +1,15 @@
 import asyncio
-from app.models.database import AsyncSessionLocal
+from app.models.database import get_sessionmaker
 from app.services.pipeline import ResumeIngestionPipeline
 from app.services.ranking import CandidateRankingEngine
 
 async def main():
     with open("sample.pdf", "rb") as f:
         mock_pdf_bytes = f.read()
+    
+    SessionLocal = get_sessionmaker()
 
-    async with AsyncSessionLocal() as session:
+    async with SessionLocal() as session:
         pipeline = ResumeIngestionPipeline(session)
         ranker = CandidateRankingEngine(session)
         

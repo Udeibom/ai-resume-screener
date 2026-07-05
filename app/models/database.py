@@ -1,59 +1,115 @@
 import os
 from datetime import datetime
-from typing import List, Optional
+from typing import AsyncGenerator, List, Optional
 
 from dotenv import load_dotenv
-from sqlalchemy import String, Text, DateTime, ForeignKey, JSON
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
+    create_async_engine,
 )
 from sqlalchemy.orm import (
-    declarative_base,
     Mapped,
+    declarative_base,
     mapped_column,
     relationship,
 )
-from pgvector.sqlalchemy import Vector
 
-# Load environment variables
+# Environment
+
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Create the async engine
-engine = create_async_engine(DATABASE_URL, echo=True)
+# SQLAlchemy Base
 
-# Create a session maker for handling transactions
-AsyncSessionLocal = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-# Base class for all models
 Base = declarative_base()
 
+# Gemini Embedding model outputs 3072-dimensional vectors.
+VECTOR_DIMENSIONS = 3072
 
-# Dependency to inject DB sessions into future API routes
-async def get_db():
-    async with AsyncSessionLocal() as session:
+# Lazy Database Initialization
+
+_engine: Optional[AsyncEngine] = None
+_sessionmaker: Optional[async_sessionmaker[AsyncSession]] = None
+
+
+def get_engine() -> AsyncEngine:
+    """
+    Lazily create and return the SQLAlchemy engine.
+
+    This prevents database initialization during module import,
+    making testing and CI much easier.
+    """
+
+    global _engine
+
+    if _engine is None:
+        if not DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL environment variable is not configured."
+            )
+
+        _engine = create_async_engine(
+            DATABASE_URL,
+            echo=False,
+            pool_pre_ping=True,
+        )
+
+    return _engine
+
+
+def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """
+    Lazily create the async session factory.
+    """
+
+    global _sessionmaker
+
+    if _sessionmaker is None:
+        _sessionmaker = async_sessionmaker(
+            bind=get_engine(),
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+    return _sessionmaker
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI dependency for injecting a database session.
+    """
+
+    session_factory = get_sessionmaker()
+
+    async with session_factory() as session:
         yield session
 
 
-# Gemini Embedding 2 produces 3072-dimensional vectors.
-VECTOR_DIMENSIONS = 3072
-
+# ORM Models
 
 class Resume(Base):
     __tablename__ = "resumes"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
 
-    # Store parsed profile info (skills, education, work experience) as JSON
+    filename: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    raw_text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
     parsed_profile: Mapped[Optional[dict]] = mapped_column(
         JSON,
         nullable=True,
@@ -64,7 +120,6 @@ class Resume(Base):
         default=datetime.utcnow,
     )
 
-    # Relationship to access child vectors
     chunks: Mapped[List["ResumeChunk"]] = relationship(
         "ResumeChunk",
         back_populates="resume",
@@ -75,16 +130,24 @@ class Resume(Base):
 class ResumeChunk(Base):
     __tablename__ = "resume_chunks"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
 
     resume_id: Mapped[int] = mapped_column(
-        ForeignKey("resumes.id", ondelete="CASCADE"),
+        ForeignKey(
+            "resumes.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
     )
 
-    chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
 
-    # Vector column using pgvector
     embedding: Mapped[Vector] = mapped_column(
         Vector(VECTOR_DIMENSIONS),
         nullable=False,
