@@ -1,0 +1,41 @@
+# Stage 1: Build dependency wheels
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install system dependencies needed to compile certain Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only the package manifest to leverage Docker layer caching
+COPY requirements.txt .
+
+# Build wheels into a local wheelhouse directory
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Stage 2: Final minimal production runtime
+FROM python:3.11-slim AS runner
+
+WORKDIR /app
+
+# Install runtime dependencies (like libpq for PostgreSQL connectivity)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed dependencies from the builder stage
+COPY --from=builder /root/.local /root/.local
+COPY . /app
+
+# Ensure scripts installed by pip are executable and on the PATH
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+# Run as a non-privileged system user for cloud security hardening
+USER 10001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

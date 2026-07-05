@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+
+# Logs
+*.log
+logs/
+*.out
+
+# Test / Coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Ruff / Linting
+.ruff_cache/
+
+
+# VS Code
+.vscode/
+
+# Linux
+*~
+
+# Generated embeddings / cache
+cache/
+tmp/
+temp/
+
+
+# PostgreSQL Docker volume
+pgdata/
+
+# Docker
+docker-compose.override.yml
+
+# Terraform
+.terraform/
+
+*.tfstate
+*.tfstate.*
+
+crash.log
+crash.*.log
+
+override.tf
+override.tf.json
+
+*_override.tf
+*_override.tf.json
+
+terraform.tfvars
+terraform.tfvars.json
+
+# AWS Credentials
+.aws/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Misc
+*.swp
+*.swo
