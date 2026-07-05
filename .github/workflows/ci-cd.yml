@@ -46,6 +46,9 @@ jobs:
           black --check app tests
 
       - name: Run Unit Tests
+        
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest
 
