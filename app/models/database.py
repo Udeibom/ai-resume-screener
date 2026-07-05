@@ -49,9 +49,7 @@ def get_engine() -> AsyncEngine:
 
     if _engine is None:
         if not DATABASE_URL:
-            raise RuntimeError(
-                "DATABASE_URL environment variable is not configured."
-            )
+            raise RuntimeError("DATABASE_URL environment variable is not configured.")
 
         _engine = create_async_engine(
             DATABASE_URL,
@@ -91,6 +89,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 # ORM Models
+
 
 class Resume(Base):
     __tablename__ = "resumes"
