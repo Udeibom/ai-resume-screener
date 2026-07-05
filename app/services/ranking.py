@@ -109,9 +109,7 @@ class CandidateRankingEngine:
                 }
 
             if row.chunk_text not in candidates_context[resume_id]["matched_snippets"]:
-                candidates_context[resume_id]["matched_snippets"].append(
-                    row.chunk_text
-                )
+                candidates_context[resume_id]["matched_snippets"].append(row.chunk_text)
 
         system_prompt = """
 You are an expert technical recruiter.
@@ -150,9 +148,7 @@ Do not invent qualifications.
 
         try:
 
-            for resume_id, data in list(candidates_context.items())[
-                :limit_candidates
-            ]:
+            for resume_id, data in list(candidates_context.items())[:limit_candidates]:
 
                 prompt = f"""
 JOB DESCRIPTION
@@ -217,9 +213,7 @@ MATCHED RESUME SNIPPETS
 
                 except Exception as exc:
 
-                    logger.exception(
-                        f"Failed evaluating candidate {resume_id}: {exc}"
-                    )
+                    logger.exception(f"Failed evaluating candidate {resume_id}: {exc}")
 
         finally:
 
