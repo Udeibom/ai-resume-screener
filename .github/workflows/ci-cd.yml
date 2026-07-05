@@ -2,51 +2,60 @@ name: CI/CD Production Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
-  # JOB 1: Code Quality, Style Testing, & Validation
+  # JOB 1: Code Quality & Testing
   quality-and-tests:
+    name: Quality Checks & Tests
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
       - name: Set up Python Runtime
-        uses: actions/workflows/setup-python@v5
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: 'pip'
+          cache: pip
 
-      - name: Install System and Project Dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
-      - name: Lint Code Base (Flake8)
+      - name: Lint Code (Flake8)
         run: |
-          # stop the build if there are Python syntax errors or undefined names
+          # Fail on syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings.
+
+          # Report remaining style issues
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      - name: Validate Formatting (Black)
-        run: black --check app tests
+      - name: Check Code Formatting
+        run: |
+          black --check app tests
 
-      - name: Run Test Suite (Pytest)
-        run: pytest
+      - name: Run Unit Tests
+        run: |
+          pytest
 
-  # JOB 2: Build and Push Docker Image to AWS ECR
+  # JOB 2: Build & Push Docker Image
   build-and-ship:
+    name: Build & Push Docker Image
     needs: quality-and-tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -62,15 +71,17 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag, and Push Production Docker Image
+      - name: Build, Tag & Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ai-resume-screener-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build our optimized multi-stage Dockerfile
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f docker/Dockerfile.production .
-          
-          # Push both the unique commit SHA tag and 'latest' tag to AWS
+          docker build \
+            -f docker/Dockerfile.production \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            .
+
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
