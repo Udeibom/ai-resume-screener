@@ -1,6 +1,9 @@
+import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.api.endpoints import router as api_router
 
 app = FastAPI(
@@ -22,6 +25,23 @@ app.add_middleware(
 
 # Include the functional routes
 app.include_router(api_router, prefix="/api/v1")
+
+# Mount static files for the frontend dashboard
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/")
+async def read_index():
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {
+        "message": "Welcome to AI Resume Screener API. Frontend static index.html not found."
+    }
 
 
 @app.get("/health", tags=["System Maintenance"])

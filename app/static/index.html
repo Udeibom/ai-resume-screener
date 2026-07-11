@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Screener & Semantic Ranker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Background glowing ambience -->
+    <div class="glow-bg">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="logo-text">AI Resume Screener</h1>
+            <p class="subtitle-text">Automated Semantic parsing & Candidate Grading powered by LLMs</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" id="tab-upload" onclick="switchTab('upload')">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                Upload & Ingest
+            </button>
+            <button class="tab-btn" id="tab-match" onclick="switchTab('match')">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                Screen & Rank
+            </button>
+        </nav>
+
+        <!-- Main Body Wrapper -->
+        <main class="main-content">
+            
+            <!-- PANEL 1: UPLOAD -->
+            <section class="content-panel active" id="panel-upload">
+                <div class="grid-layout">
+                    <!-- Left: Upload action -->
+                    <div class="card glass-card upload-column">
+                        <h2>Ingest Candidate PDF</h2>
+                        <p class="description">Upload candidate resume (vector PDF) to parse structure, compute embeddings, and store vector indexes.</p>
+                        
+                        <div class="drop-zone" id="drop-zone">
+                            <input type="file" id="file-input" accept=".pdf" class="hidden-input">
+                            <div class="drop-zone-prompt">
+                                <div class="upload-icon-wrapper">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v12M12 2L8 6M12 2l4 6M22 13v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6"/></svg>
+                                </div>
+                                <p class="prompt-text">Drag & drop your PDF resume here</p>
+                                <span class="browse-link">or click to browse files</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress / Status Indicator -->
+                        <div class="status-box hidden" id="upload-status">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" id="progress-fill"></div>
+                            </div>
+                            <p class="status-text" id="status-message">Processing file...</p>
+                        </div>
+                    </div>
+
+                    <!-- Right: Ingestion Results details -->
+                    <div class="card glass-card profile-column empty-state" id="profile-container">
+                        <div class="empty-prompt">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            <p>No candidate resume ingested yet.</p>
+                            <span>Upload a PDF resume on the left to see the structured profile extraction.</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PANEL 2: MATCHING & RANKING -->
+            <section class="content-panel" id="panel-match">
+                <div class="grid-layout">
+                    <!-- Left: Match criteria -->
+                    <div class="card glass-card match-column">
+                        <h2>Semantic Screening</h2>
+                        <p class="description">Input a target role description to perform a vector search and LLM-powered candidate grading.</p>
+                        
+                        <div class="form-group">
+                            <label for="job-description">Job Description</label>
+                            <textarea id="job-description" placeholder="Describe the role requirements, technical skills, and experience levels required..." rows="8" minlength="10"></textarea>
+                        </div>
+
+                        <div class="form-group slider-group">
+                            <div class="slider-header">
+                                <label for="match-limit">Max Candidates to Return</label>
+                                <span class="slider-val" id="limit-val">5</span>
+                            </div>
+                            <input type="range" id="match-limit" min="1" max="20" value="5" oninput="document.getElementById('limit-val').textContent = this.value">
+                        </div>
+
+                        <button class="action-btn" id="btn-run-match" onclick="runMatching()">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            <span>Rank Candidates</span>
+                        </button>
+                    </div>
+
+                    <!-- Right: Ranked Match results -->
+                    <div class="card glass-card results-column empty-state" id="results-container">
+                        <div class="empty-prompt">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <p>No evaluation compiled yet.</p>
+                            <span>Enter a job description on the left to rank stored candidates.</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
