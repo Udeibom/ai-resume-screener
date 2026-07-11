@@ -25,34 +25,22 @@ class CandidateRankingEngine:
         self.db = db_session
         self.ai = AIService()
         self._mlflow_initialized = False
+        self._initialize_mlflow()
 
-    def _initialize_mlflow(self) -> None:
-        """
-        Initialize MLflow only when the ranking engine is actually used.
-        """
+    def _initialize_mlflow(self):
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 
-        if self._mlflow_initialized:
+        if not tracking_uri:
+            logger.info("MLflow disabled.")
             return
-
-        tracking_uri = os.getenv(
-            "MLFLOW_TRACKING_URI",
-            "http://localhost:5000",
-        )
 
         try:
             mlflow.set_tracking_uri(tracking_uri)
             mlflow.set_experiment("Resume_Screening_Rankings")
             self._mlflow_initialized = True
 
-            logger.info(
-                "MLflow initialized.",
-                extra_context={"tracking_uri": tracking_uri},
-            )
-
-        except Exception as exc:
-            logger.warning(
-                f"MLflow unavailable. Continuing without experiment tracking. {exc}"
-            )
+        except Exception as e:
+            logger.warning(f"MLflow unavailable: {e}")
 
     async def rank_candidates(
         self,
@@ -62,12 +50,20 @@ class CandidateRankingEngine:
 
         logger.info(
             "Initiating candidate ranking.",
-            extra_context={"limit": limit_candidates},
+            extra={
+                "extra_context": {
+                    "limit": limit_candidates,
+                }
+            },
         )
 
-        self._initialize_mlflow()
+        logger.info("1. Starting ranking")
+
+        logger.info("Skipping MLflow")
+        logger.info("2. skipped")
 
         job_vector = (await self.ai.generate_embeddings([job_description]))[0]
+        logger.info("3. Job embedding generated")
 
         query = text(
             """
@@ -89,6 +85,7 @@ class CandidateRankingEngine:
             query,
             {"vector": str(job_vector)},
         )
+        logger.info("4. Vector search completed")
 
         rows = result.fetchall()
 
@@ -205,9 +202,11 @@ MATCHED RESUME SNIPPETS
 
                     logger.info(
                         "Candidate evaluated.",
-                        extra_context={
-                            "candidate": resume_id,
-                            "score": fit_score,
+                        extra={
+                            "extra_context": {
+                                "candidate": resume_id,
+                                "score": fit_score,
+                            }
                         },
                     )
 

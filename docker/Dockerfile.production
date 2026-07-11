@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 
 # Build wheels into a local wheelhouse directory
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Final minimal production runtime
 FROM python:3.11-slim AS runner
@@ -26,11 +26,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed dependencies from the builder stage
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /usr/local /usr/local
 COPY . /app
 
-# Ensure scripts installed by pip are executable and on the PATH
-ENV PATH=/root/.local/bin:$PATH
+# Ensure scripts installed by pip are executable
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000

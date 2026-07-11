@@ -8,6 +8,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 from app.core.schemas import CandidateProfile
+from app.core.logger import logger
 
 load_dotenv()
 
@@ -64,10 +65,12 @@ class AIService:
         delay = initial_delay
 
         for attempt in range(retries):
+            logger.info(f"Retry attempt {attempt + 1}")
             try:
                 return await asyncio.to_thread(func)
 
-            except Exception:
+            except Exception as e:
+                logger.exception(f"Gemini request failed: {e}")
                 if attempt == retries - 1:
                     raise
 
@@ -88,7 +91,11 @@ class AIService:
                 contents=text_chunks,
             )
 
+        logger.info("Generating embeddings...")
+
         response = await self._run_with_retry(task)
+
+        logger.info("Embeddings received.")
 
         return [embedding.values for embedding in response.embeddings]
 
