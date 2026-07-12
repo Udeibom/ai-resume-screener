@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List
-
+from app.core.schemas import CandidateProfile
 
 class MatchRequest(BaseModel):
     job_description: str = Field(
@@ -33,4 +33,4 @@ class UploadResponse(BaseModel):
     message: str
     resume_id: int
     filename: str
-    detected_candidate: str
+    profile: CandidateProfile

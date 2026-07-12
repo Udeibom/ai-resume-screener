@@ -35,12 +35,12 @@ async def upload_resume(
             file.filename, file_bytes
         )
 
-        return {
-            "message": "Resume successfully processed.",
-            "resume_id": resume_record.id,
-            "filename": resume_record.filename,
-            "profile": resume_record.parsed_profile,
-        }
+        return UploadResponse(
+            message="Resume successfully processed.",
+            resume_id=resume_record.id,
+            filename=resume_record.filename,
+            profile=resume_record.parsed_profile,
+)
     except Exception as e:
         # Production tip: Log the exact error internally, throw generic detail to client
         raise HTTPException(

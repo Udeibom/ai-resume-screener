@@ -198,7 +198,8 @@ async def test_api_endpoints(MockRankingAIClass, MockPipelineAIClass, sample_pdf
         response = await client.post("/api/v1/resumes/upload", files=files)
         assert response.status_code == 201
         data = response.json()
-        assert data["detected_candidate"] == "John Doe"
+        assert data["profile"]["full_name"] == "John Doe"
+        assert data["profile"]["email"] == "john@example.com"
 
         # 2. Test /jobs/match
         payload = {
