@@ -110,7 +110,11 @@ async function handleUpload(file) {
         statusMessage.textContent = "Success! Profile extracted and indexed.";
         
         // Fetch and show parsed candidate details
-        fetchAndShowProfile(data.resume_id, file.name);
+        renderProfile(
+            profileContainer,
+            data.filename,
+            data.profile
+        );
 
     } catch (err) {
         showUploadError(err.message);
@@ -123,43 +127,49 @@ function showUploadError(msg) {
     statusMessage.style.color = '#EF4444';
 }
 
-// Fetch and display parsed candidate profile on the right panel
-async function fetchAndShowProfile(resumeId, filename) {
-    const profileContainer = document.getElementById('profile-container');
-    
-    // We get the parsed profile from the response of the API
-    try {
-        // FastAPI upload endpoint returns the profile details or we can read them
-        // Let's fetch mock structure profile matching endpoint returns
-        const res = await fetch(`/api/v1/jobs/match`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_description: "dummy description to fetch", limit: 50 })
-        });
-        
-        const matchData = await res.json();
-        const matches = matchData.results || [];
-        const candidate = matches.find(m => m.candidate_id === resumeId);
-        
-        // Let's call a mock fetch or build directly using local storage or fallback profile parsed detail
-        // Let's construct a general mock display details
-        renderProfile(profileContainer, filename, candidate);
 
-    } catch (err) {
-        console.error("Failed loading parsed details", err);
-        // Direct default fallback render if profile match details fetch was incomplete
-        renderProfile(profileContainer, filename, null);
-    }
-}
-
-function renderProfile(container, filename, candidate) {
+function renderProfile(container, filename, profile) {
     container.classList.remove('empty-state');
     
-    // Fallback Mock profile values if not fully populated via API
-    const name = candidate ? candidate.name : "Jane Doe";
-    const level = "Mid/Senior";
-    const email = "candidate@example.com";
+    const name = profile.full_name || "Unknown";
+    const email = profile.email || "N/A";
+    const level = profile.experience_level || "Unknown";
+
+    // Skills
+    const skillsHtml = (profile?.skills || [])
+        .map(skill => `<span class="skill-tag">${skill}</span>`)
+        .join("");
+
+    // Employment History
+    const workHtml = (profile?.work_history || [])
+        .map(job => `
+            <div class="timeline-item">
+                <p class="timeline-role">${job.role}</p>
+                <p class="timeline-company">${job.company}</p>
+                <p class="timeline-duration">${job.duration}</p>
+
+                <ul class="timeline-bullets">
+                    ${(job.responsibilities || [])
+                        .map(r => `<li>${r}</li>`)
+                        .join("")}
+                </ul>
+            </div>
+        `)
+        .join("");
+
+    // Education
+    const educationHtml = (profile?.education_history || [])
+        .map(ed => `
+            <div class="timeline-item">
+                <p class="timeline-role">${ed.degree}</p>
+                <p class="timeline-company">${ed.institution}</p>
+                <p class="timeline-duration">${ed.graduation_year || ""}</p>
+            </div>
+        `)
+        .join("");
+
     
+
     container.innerHTML = `
         <div class="profile-header">
             <div>
@@ -179,48 +189,21 @@ function renderProfile(container, filename, candidate) {
         <div class="profile-section">
             <h3>Technical Skills</h3>
             <div class="skills-list">
-                <span class="skill-tag">Python</span>
-                <span class="skill-tag">FastAPI</span>
-                <span class="skill-tag">PostgreSQL</span>
-                <span class="skill-tag">Docker</span>
-                <span class="skill-tag">AWS</span>
-                <span class="skill-tag">Git</span>
+                ${skillsHtml}
             </div>
         </div>
 
         <div class="profile-section">
             <h3>Employment History</h3>
             <div class="timeline-list">
-                <div class="timeline-item">
-                    <p class="timeline-role">Senior Software Engineer</p>
-                    <p class="timeline-company">Initech Systems</p>
-                    <p class="timeline-duration">Jan 2022 - Present</p>
-                    <ul class="timeline-bullets">
-                        <li>Designed and deployed secure REST APIs using FastAPI and python</li>
-                        <li>Containerized microservices with Docker and orchestrated with ECS Fargate</li>
-                        <li>Configured vector database indexing with pgvector to enable semantic search</li>
-                    </ul>
-                </div>
-                <div class="timeline-item">
-                    <p class="timeline-role">Backend Engineer</p>
-                    <p class="timeline-company">Cyberdyne Systems</p>
-                    <p class="timeline-duration">Jun 2020 - Dec 2021</p>
-                    <ul class="timeline-bullets">
-                        <li>Integrated third party webhooks and authentication middleware layers</li>
-                        <li>Improved sql database query response times by 35% using indexing</li>
-                    </ul>
-                </div>
-            </div>
+                ${workHtml}
+</div>
         </div>
 
         <div class="profile-section">
             <h3>Education & Credentials</h3>
             <div class="timeline-list">
-                <div class="timeline-item">
-                    <p class="timeline-role">B.S. in Computer Science</p>
-                    <p class="timeline-company">State University of Technology</p>
-                    <p class="timeline-duration">Graduated 2020</p>
-                </div>
+                ${educationHtml}
             </div>
         </div>
     `;
