@@ -40,7 +40,7 @@ async def upload_resume(
             resume_id=resume_record.id,
             filename=resume_record.filename,
             profile=resume_record.parsed_profile,
-)
+        )
     except Exception as e:
         # Production tip: Log the exact error internally, throw generic detail to client
         raise HTTPException(
